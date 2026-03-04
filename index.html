@@ -1,0 +1,1202 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#0a0f1a" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Preceptoría" />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="apple-touch-icon" href="icon.png" />
+  <title>Preceptoría</title>
+  <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #0a0f1a; }
+    input[type=date]::-webkit-calendar-picker-indicator { filter: invert(1); }
+    ::-webkit-scrollbar { width: 4px; height: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #374151; border-radius: 2px; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script>
+const { useState, useEffect, useCallback, useRef } = React;
+
+// ── DATOS ─────────────────────────────────────────────────────────
+const DIVISIONES_INIT = {
+  "1° A": [
+    { id: 1,  apellido: "AIRES",            nombre: "BRIAN JOEL",           sexo: "M" },
+    { id: 2,  apellido: "ALTAMIRANO",        nombre: "VALENTINA MAGALI",     sexo: "F" },
+    { id: 3,  apellido: "BARRIOS",           nombre: "THIAGO DAVID",         sexo: "M" },
+    { id: 4,  apellido: "CABRAL",            nombre: "LUCIANA AGOSTINA",     sexo: "F" },
+    { id: 5,  apellido: "CASCALES",          nombre: "GABRIEL ADRIEL",       sexo: "M" },
+    { id: 6,  apellido: "CASTILLO AGUIRRE",  nombre: "FRANCO DAMIAN",        sexo: "M" },
+    { id: 7,  apellido: "GOMEZ ARANDA",      nombre: "JESUS MIGUEL",         sexo: "M" },
+    { id: 8,  apellido: "HUMANA",            nombre: "TIARA GUADALUPE",      sexo: "F" },
+    { id: 9,  apellido: "LAGORIA",           nombre: "LEONEL GABRIEL",       sexo: "M" },
+    { id: 10, apellido: "NEIMAN",            nombre: "ZOE MARIA LUZ",        sexo: "F" },
+    { id: 11, apellido: "NUÑEZ ORESTE",      nombre: "NAHIARA LUNA JAZMIN",  sexo: "F" },
+    { id: 12, apellido: "OJEDA",             nombre: "EUGENIA ZAMIRA",       sexo: "F" },
+    { id: 13, apellido: "ORIETA GALVAN",     nombre: "ALMA NARELLA AILIN",   sexo: "F" },
+    { id: 14, apellido: "PELOZO",            nombre: "BENJAMIN AGUSTIN",     sexo: "M" },
+    { id: 15, apellido: "PERALTA",           nombre: "MILO LAUREANO",        sexo: "M" },
+    { id: 16, apellido: "QUIROGA",           nombre: "ISAÍAS FACUNDO",       sexo: "M" },
+    { id: 17, apellido: "RODRIGUEZ",         nombre: "SANTIAGO TOMAS",       sexo: "M" },
+    { id: 18, apellido: "ROJAS",             nombre: "YAMILA NAYLA",         sexo: "F" },
+    { id: 19, apellido: "SALTO",             nombre: "LUCIANO JOEL",         sexo: "M" },
+    { id: 20, apellido: "UBEDA",             nombre: "LUNA BELEN",           sexo: "F" },
+    { id: 21, apellido: "VALENZUELA",        nombre: "ALEX BENJAMIN URIEL",  sexo: "M" },
+    { id: 22, apellido: "VILLCA SALDAÑA",    nombre: "LEYLA LIVIA",          sexo: "F" },
+    { id: 23, apellido: "DRAGON",            nombre: "MIQUEAS GABRIEL",      sexo: "M" },
+    { id: 24, apellido: "SONZOGNO",          nombre: "THOMAS EZEQUIEL",      sexo: "M" },
+    { id: 25, apellido: "COLMAN",            nombre: "LUCIA BELEN",          sexo: "F" },
+    { id: 26, apellido: "TOLEDO FERNANDEZ",  nombre: "ZIA FRANCESCA",        sexo: "F" },
+    { id: 27, apellido: "SUAREZ",            nombre: "LUCIA MICAELA",        sexo: "F" },
+    { id: 28, apellido: "GARCÍA",            nombre: "VALENTIN AUGUSTO",     sexo: "M" },
+    { id: 29, apellido: "MARTINEZ",          nombre: "BIANCA AGOSTINA",      sexo: "F" },
+    { id: 30, apellido: "ALARCON",           nombre: "JUAN ELISEO NATANAHEL",sexo: "M" },
+  ],
+};
+
+const MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+const ESTADOS = ["P","A","T","J"];
+const ESTADO_LABEL = { P:"Presente", A:"Ausente", T:"Tarde", J:"Justificada" };
+const ESTADO_COLOR = { P:"#22c55e", A:"#ef4444", T:"#f59e0b", J:"#3b82f6" };
+const UMBRAL_ALERTA = 15;
+
+// EF se justifica si el turno principal del mismo día es J
+function efEsJustificada(turno) { return turno === "J"; }
+
+// ── STORAGE ───────────────────────────────────────────────────────
+const sk  = (div, yr) => `asist_${div}_${yr}`;
+function loadData(div, yr)   { try { const v = localStorage.getItem(sk(div,yr));  return v ? JSON.parse(v) : {}; } catch (e2) { return {}; } }
+function saveData(div, yr, d){ try { localStorage.setItem(sk(div,yr), JSON.stringify(d)); } catch (e3) {} }
+function loadDivs()          { try { const v = localStorage.getItem("divisiones"); return v ? JSON.parse(v) : DIVISIONES_INIT; } catch (e4) { return DIVISIONES_INIT; } }
+function saveDivs(d)         { try { localStorage.setItem("divisiones", JSON.stringify(d)); } catch (e5) {} }
+function loadArchivo(div)    { try { const v = localStorage.getItem(`archivo_${div}`); return v ? JSON.parse(v) : []; } catch (e6) { return []; } }
+function saveArchivo(div, d) { try { localStorage.setItem(`archivo_${div}`, JSON.stringify(d)); } catch (e7) {} }
+function loadFeriados(yr)    { try { const v = localStorage.getItem(`feriados_${yr}`); return v ? JSON.parse(v) : {}; } catch (e8) { return {}; } }
+function saveFeriados(yr, d) { try { localStorage.setItem(`feriados_${yr}`, JSON.stringify(d)); } catch (e9) {} }
+
+// ── HELPERS ───────────────────────────────────────────────────────
+function diasEnMes(m, y) { return new Date(y, m+1, 0).getDate(); }
+function hoy() { const d = new Date(); return { dia:d.getDate(), mes:d.getMonth(), anio:d.getFullYear() }; }
+function kT(m,d,id)  { return `${m}_${d}_${id}`; }
+function kEF(m,d,id) { return `ef_${m}_${d}_${id}`; }
+function kF(m,d)     { return `${m}_${d}`; }          // feriado key
+function diaSemana(anio, mes, dia) { return new Date(anio, mes, dia).getDay(); } // 0=dom, 6=sab
+function esFinde(anio, mes, dia)   { const dow = diaSemana(anio,mes,dia); return dow===0||dow===6; }
+
+function calcStats(alumnos, data, anio) {
+  return alumnos.map(al => {
+    let injust=0, just=0, efInj=0, efJus=0;
+    for (let m=0; m<12; m++) {
+      for (let d=1; d<=diasEnMes(m,anio); d++) {
+        const turno = data[kT(m,d,al.id)] || "";
+        const tieneEF = !!data[kEF(m,d,al.id)];
+        if (turno==="A") injust+=1;
+        else if (turno==="T") injust+=0.5;
+        else if (turno==="J") just+=1;
+        if (tieneEF) { if (efEsJustificada(turno)) efJus+=0.5; else efInj+=0.5; }
+      }
+    }
+    const totalInasist = injust + efInj;
+    return { ...al, injust, just, efInj, efJus, totalInasist, enRiesgo: totalInasist >= UMBRAL_ALERTA };
+  });
+}
+
+function calcDayStats(alumnos, data, m, d) {
+  let P=0,A=0,T=0,J=0,EF=0;
+  let VP=0,VA=0,totalV=0, MP=0,MA=0,totalM=0;
+  alumnos.forEach(al => {
+    const v = data[kT(m,d,al.id)] || "";
+    if (v==="P") P++; else if (v==="A") A++; else if (v==="T") T++; else if (v==="J") J++;
+    if (data[kEF(m,d,al.id)]) EF++;
+    // Por género
+    if (al.sexo==="M") {
+      totalV++;
+      if (v==="P"||v==="T") VP++; else if (v==="A"||v==="J") VA++;
+    } else {
+      totalM++;
+      if (v==="P"||v==="T") MP++; else if (v==="A"||v==="J") MA++;
+    }
+  });
+  // Presencia física: en la escuela = P+T / fuera = A+J
+  const enEscuela = P+T;
+  const fueraEscuela = A+J;
+  return { P,A,T,J,EF, VP,VA,totalV, MP,MA,totalM, enEscuela,fueraEscuela };
+}
+
+// ── CUMPLEAÑOS ───────────────────────────────────────────────────
+function esCumple(nacimiento, dia, mes) {
+  if (!nacimiento) return false;
+  const [y, m, d] = nacimiento.split("-").map(Number);
+  return d === dia && (m - 1) === mes;
+}
+function edadHoy(nacimiento, anio) {
+  if (!nacimiento) return null;
+  const [y] = nacimiento.split("-").map(Number);
+  return anio - y;
+}
+
+// ── DETECCIÓN DE GÉNERO ──────────────────────────────────────────
+const NOMBRES_F = new Set("VALENTINA,LUCIANA,TIARA,ZOE,NAHIARA,EUGENIA,ALMA,YAMILA,LUNA,LEYLA,LUCIA,ZIA,BIANCA,AGOSTINA,SOFIA,MARTINA,CAMILA,MARIA,ANA,LAURA,PAULA,CAROLINA,ANDREA,FLORENCIA,NATALIA,VIRGINIA,DANIELA,ALEJANDRA,MICAELA,BELEN,MAGALI,GUADALUPE,JAZMIN,NARELLA,AILIN,NAYLA,AILEN,MILAGROS,ROCIO,GENESIS,ABRIL,VICTORIA,CELESTE,ROMINA,SABRINA,NOELIA,MELINA,JULIETA,ANTONELLA,CLAUDIA,VANESA,TAMARA,DEBORA,BRENDA,LORENA,SOLEDAD,PAOLA,VERONICA,MARIANA,SILVANA,SUSANA,KARINA,VIVIANA,LILIANA,NADIA,AYELEN,GISELA,PRISCILA,ESTEFANIA,CINTIA,DAIANA,LARA,MAIRA,NAOMI,ISABEL,ROSA,ELENA,DOLORES,MERCEDES,PILAR,FERNANDA,ESTELA,GRACIELA,MONICA,PATRICIA,CRISTINA,MIRTA,NORMA,ELSA,MARTA,ALICIA,TERESA,IRMA,NORA,OLGA,ZULMA,HILDA,GLADYS,SILVIA,BEATRIZ,DELIA,ELBA,ALBA,LILIA,NIDIA,GRACIELA,INES,LEONOR,CELIA,AMALIA,JULIA,ERNESTINA,YOLANDA,RAMONA,AURORA,LOURDES,JIMENA,ALDANA,EVELYN,GRISELDA,ROXANA,LORENA,MARISA,NATALIA,SOLANGE,EMILIA,AMPARO,AGUSTINA,CATALINA,RENATA,ISADORA,MORENA,MALENA,IARA,MAYA,ZARA,LUNA,AURORA,VIOLETA,VERA,VERA,VICKY,TANIA,TALI,NELA,LENA,LEIA,KALI,JUANA,IVA,INA,GINA,FIONA,FELI,EMMA,ELLE,ELA,DINA,DANA,CLOE,CARO,BONA,BELA,BECA,ASIA,ARIA".split(","));
+const NOMBRES_M = new Set("BRIAN,THIAGO,GABRIEL,FRANCO,JESUS,LEONEL,BENJAMIN,MILO,ISAIAS,SANTIAGO,LUCIANO,ALEX,MIQUEAS,THOMAS,VALENTIN,JUAN,NICOLAS,MARTIN,DIEGO,MATIAS,RODRIGO,EZEQUIEL,FACUNDO,GONZALO,HERNAN,IGNACIO,JOAQUIN,LEANDRO,MARCOS,PABLO,PATRICIO,RAFAEL,SERGIO,TOMAS,WALTER,AGUSTIN,ALAN,ALBERTO,ALFREDO,ANDRES,ANGEL,ARIEL,ARMANDO,AUGUSTO,BORIS,CARLOS,CESAR,CLAUDIO,CRISTIAN,DAMIAN,DANIEL,DAVID,DARIO,ESTEBAN,FABIAN,FEDERICO,FELIPE,FERNANDO,FRANCISCO,GERARDO,GERMAN,GUSTAVO,HECTOR,HORACIO,HUGO,IVAN,JAVIER,JORGE,JOSE,JULIO,KEVIN,LEONARDO,LISANDRO,LUIS,MANUEL,MARIO,MAURICIO,MAURO,MAXIMILIANO,MIGUEL,OMAR,OSCAR,PEDRO,RAMON,RAUL,RICARDO,ROBERTO,RUBEN,SEBASTIAN,SILVIO,VICTOR,ALEJANDRO,ALEXIS,ARIEL,EMILIANO,EMILIO,ENZO,GIULIANO,LAUTARO,LUCAS,NAHUEL,PABLO,RAMIRO,SAMUEL,TOBIAS,TOMAS,URIEL,AUGUSTO,NATANAHEL,LAUREANO,ADRIEL,DAMIAN,JOEL,EZEQUIEL,GABRIEL,THOMAS,ELISEO,FACUNDO,JOEL,URIEL,ABEL,ABEL,ADAN,ALDO,BLAS,BORIS,BRAM,CIRO,CIRO,DANO,DARO,DINO,EMIR,ENZO,ERIK,EVAN,GAEL,GINO,IVAN,IVAN,IKER,JOEL,JOSE,JUAN,KAEL,LIAM,LUCA,LUIS,MARC,NAUM,NEIL,NERO,NOEL,OMAR,OTTO,REMI,RENO,ROEL,SAUL,SETH,THEO,THOR,TITO,UGO,ULMO,VITO,ZEUS".split(","));
+
+function detectarSexo(nombre) {
+  const primero = nombre.trim().split(/\s+/)[0].toUpperCase();
+  if (NOMBRES_F.has(primero)) return "F";
+  if (NOMBRES_M.has(primero)) return "M";
+  return "?"; // dudoso
+}
+
+function parsearListado(texto) {
+  return texto.split("\n")
+    .map(l => l.trim())
+    .filter(l => l.length > 2)
+    .map(l => {
+      // Remove leading number: "1. ", "1) ", "1 - " etc
+      l = l.replace(/^\d+[.)\-\s]+/, "").trim();
+      const coma = l.indexOf(",");
+      let apellido, nombre;
+      if (coma !== -1) {
+        apellido = l.slice(0, coma).trim().toUpperCase();
+        nombre   = l.slice(coma + 1).trim().toUpperCase();
+      } else {
+        // fallback: first word = apellido
+        const parts = l.split(/\s+/);
+        apellido = parts[0].toUpperCase();
+        nombre   = parts.slice(1).join(" ").toUpperCase();
+      }
+      const sexo = detectarSexo(nombre);
+      return { apellido, nombre, sexo };
+    })
+    .filter(a => a.apellido && a.nombre);
+}
+
+// ── APP ───────────────────────────────────────────────────────────
+function App() {
+  const { anio } = hoy();
+  const [divs, setDivs]           = useState(loadDivs);
+  const [divActual, setDivActual] = useState(() => Object.keys(loadDivs())[0]);
+  const [mes, setMes]             = useState(() => hoy().mes);
+  const [dia, setDia]             = useState(() => hoy().dia);
+  const [data, setData]           = useState(() => loadData(Object.keys(loadDivs())[0], hoy().anio));
+  const [vista, setVista]         = useState("hoy");
+  const [modalAl, setModalAl]     = useState(null);
+  const [showNewDiv, setShowNewDiv]     = useState(false);
+  const [newDivNombre, setNewDivNombre] = useState("");
+  const [showEditDiv, setShowEditDiv]   = useState(false);
+  const [editDivNombre, setEditDivNombre] = useState("");
+  const [showAddAl, setShowAddAl] = useState(false);
+  const [showImport, setShowImport] = useState(false);
+  const [editId, setEditId]       = useState(null);
+  const [formAl, setFormAl]       = useState({ apellido:"", nombre:"", sexo:"M", nacimiento:"" });
+
+  const alumnos = divs[divActual] || [];
+  const [archivo, setArchivo] = useState(() => loadArchivo(Object.keys(loadDivs())[0]));
+
+  useEffect(() => { setArchivo(loadArchivo(divActual)); }, [divActual]);
+
+  function darDeBaja(al) {
+    const fechaBaja = new Date().toLocaleDateString("es-AR");
+    // Remove from active list
+    const activos = alumnos.filter(a => a.id !== al.id);
+    const ndDivs = {...divs, [divActual]: activos};
+    setDivs(ndDivs); saveDivs(ndDivs);
+    // Add to archive
+    const ndArchivo = [...archivo, {...al, fechaBaja}];
+    setArchivo(ndArchivo); saveArchivo(divActual, ndArchivo);
+    setModalAl(null);
+  }
+
+  function reincorporar(al) {
+    // Remove fechaBaja and add back to active list
+    const { fechaBaja, ...alActivo } = al;
+    const activos = [...alumnos, alActivo];
+    const ndDivs = {...divs, [divActual]: activos};
+    setDivs(ndDivs); saveDivs(ndDivs);
+    // Remove from archive
+    const ndArchivo = archivo.filter(a => a.id !== al.id);
+    setArchivo(ndArchivo); saveArchivo(divActual, ndArchivo);
+  }
+
+  useEffect(() => { setData(loadData(divActual, anio)); }, [divActual, anio]);
+
+  const [feriados, setFeriados] = useState(() => loadFeriados(hoy().anio));
+
+  function toggleFeriado(m, d) {
+    const key = kF(m,d);
+    const nd = {...feriados};
+    if (nd[key]) delete nd[key]; else nd[key] = true;
+    setFeriados(nd); saveFeriados(anio, nd);
+  }
+
+  const persist = useCallback((nd) => { setData(nd); saveData(divActual, anio, nd); }, [divActual, anio]);
+
+  function setEstado(alId, m, d, estado) {
+    const key = kT(m,d,alId); const nd = {...data};
+    if (!estado || nd[key]===estado) delete nd[key]; else nd[key]=estado;
+    persist(nd);
+  }
+  function toggleEF(alId, m, d) {
+    const key = kEF(m,d,alId); const nd = {...data};
+    if (nd[key]) delete nd[key]; else nd[key]=true;
+    persist(nd);
+  }
+
+  const alStats  = calcStats(alumnos, data, anio);
+  const enRiesgo = alStats.filter(a => a.enRiesgo);
+  const dayStats = calcDayStats(alumnos, data, mes, dia);
+  const diasDelMes = diasEnMes(mes, anio);
+
+  function crearDiv() {
+    if (!newDivNombre.trim()) return;
+    const nd = {...divs, [newDivNombre.trim()]: []};
+    setDivs(nd); saveDivs(nd); setDivActual(newDivNombre.trim());
+    setNewDivNombre(""); setShowNewDiv(false);
+  }
+  function renombrarDiv() {
+    const nuevo = editDivNombre.trim();
+    if (!nuevo || nuevo === divActual) { setShowEditDiv(false); return; }
+    // Rebuild divs object preserving order but with new key
+    const entries = Object.entries(divs).map(([k,v]) => k===divActual ? [nuevo,v] : [k,v]);
+    const nd = Object.fromEntries(entries);
+    setDivs(nd); saveDivs(nd);
+    // Migrate data and archivo to new key
+    const dataActual = loadData(divActual, anio);
+    saveData(nuevo, anio, dataActual);
+    const archivoActual = loadArchivo(divActual);
+    saveArchivo(nuevo, archivoActual);
+    setDivActual(nuevo);
+    setShowEditDiv(false);
+  }
+  function guardarAlumno() {
+    if (!formAl.apellido.trim() || !formAl.nombre.trim()) return;
+    const arr = [...alumnos];
+    if (editId !== null) { const i=arr.findIndex(a=>a.id===editId); arr[i]={...arr[i],...formAl}; }
+    else arr.push({ id: arr.reduce((mx,a)=>Math.max(mx,a.id),0)+1, ...formAl });
+    const nd = {...divs, [divActual]: arr};
+    setDivs(nd); saveDivs(nd); setEditId(null); setShowAddAl(false); setFormAl({apellido:"",nombre:"",sexo:"M",nacimiento:""});
+  }
+  function importarAlumnos(lista) {
+    const arr = [...alumnos];
+    let maxId = arr.reduce((mx,a)=>Math.max(mx,a.id),0);
+    lista.forEach(al => {
+      maxId++;
+      arr.push({ id: maxId, ...al });
+    });
+    const nd = {...divs, [divActual]: arr};
+    setDivs(nd); saveDivs(nd);
+    setShowImport(false);
+  }
+  function eliminarAlumno(id) {
+    const nd = {...divs, [divActual]: alumnos.filter(a=>a.id!==id)};
+    setDivs(nd); saveDivs(nd); setModalAl(null);
+  }
+
+  return (
+    React.createElement('div', { style: s.root,}
+      , React.createElement('header', { style: s.header,}
+        , React.createElement('div', { style: s.headerTop,}
+          , React.createElement('div', null
+            , React.createElement('p', { style: s.headerLabel,}, "PRECEPTORÍA")
+            , React.createElement('h1', { style: s.headerTitle,}, "Asistencia")
+          )
+          , React.createElement('span', { style: s.anioTag,}, anio)
+        )
+        , React.createElement('div', { style: s.divSelector,}
+          , Object.keys(divs).map(div => (
+            React.createElement('button', { key: div,
+              onClick: ()=>{ if(divActual===div){setEditDivNombre(div);setShowEditDiv(true);}else setDivActual(div); },
+              onContextMenu: e=>{e.preventDefault();setDivActual(div);setEditDivNombre(div);setShowEditDiv(true);},
+              onTouchStart: e=>{const t=setTimeout(()=>{setDivActual(div);setEditDivNombre(div);setShowEditDiv(true);},600);e.currentTarget._dTimer=t;},
+              onTouchEnd: e=>{clearTimeout(e.currentTarget._dTimer);},
+              onTouchMove: e=>{clearTimeout(e.currentTarget._dTimer);},
+              style: {...s.divBtn,...(divActual===div?s.divBtnActive:{})},}
+              , div, divActual===div?" ✏️":""
+            )
+          ))
+          , React.createElement('button', { onClick: ()=>setShowNewDiv(true), style: s.divBtnAdd,}, "＋")
+        )
+      )
+
+      , React.createElement('main', { style: s.main,}
+        , vista==="hoy"    && React.createElement(VistaHoy, {     alumnos: alStats,  data: data, mes: mes, dia: dia, diasDelMes: diasDelMes, dayStats: dayStats, setMes: setMes, setDia: setDia, setEstado: setEstado, toggleEF: toggleEF, setModalAl: setModalAl, feriados: feriados, toggleFeriado: toggleFeriado, anio: anio,} )
+        , vista==="grilla" && React.createElement(VistaGrilla, {  alumnos: alStats,  data: data, mes: mes, diasDelMes: diasDelMes, setMes: setMes, setEstado: setEstado, toggleEF: toggleEF, feriados: feriados, toggleFeriado: toggleFeriado, anio: anio,} )
+        , vista==="alertas"&& React.createElement(VistaAlertas, { alumnos: alStats,  enRiesgo: enRiesgo,} )
+        , vista==="config" && React.createElement(VistaConfig, {  alumnos: alumnos, divActual: divActual,
+            onAdd: ()=>{setEditId(null);setFormAl({apellido:"",nombre:"",sexo:"M"});setShowAddAl(true);},
+            onEdit: al=>{setEditId(al.id);setFormAl({apellido:al.apellido,nombre:al.nombre,sexo:al.sexo});setShowAddAl(true);},
+            onDelete: eliminarAlumno,
+            onReorder: newArr=>{const nd={...divs,[divActual]:newArr};setDivs(nd);saveDivs(nd);},
+            archivo: archivo, onDarDeBaja: darDeBaja, onReincorporar: reincorporar,
+            onImport: ()=>setShowImport(true),
+            data: data, anio: anio,} )
+      )
+
+      , React.createElement('nav', { style: s.nav,}
+        , [
+          {id:"hoy",    icon:"📋",label:"Hoy"},
+          {id:"grilla", icon:"📅",label:"Mes"},
+          {id:"alertas",icon:"⚠️", label: enRiesgo.length>0?`Riesgo (${enRiesgo.length})`:"Riesgo"},
+          {id:"config", icon:"👥",label:"Alumnos"},
+        ].map(t=>(
+          React.createElement('button', { key: t.id, onClick: ()=>setVista(t.id), style: {...s.navBtn,...(vista===t.id?s.navBtnActive:{})},}
+            , React.createElement('span', { style: s.navIcon,}, t.icon)
+            , React.createElement('span', { style: s.navLabel,}, t.label)
+          )
+        ))
+      )
+
+      , showNewDiv && (
+        React.createElement(Modal, { onClose: ()=>setShowNewDiv(false), titulo: "Nueva división" ,}
+          , React.createElement('input', { style: s.input, placeholder: "Ej: 2° B"  , value: newDivNombre,
+            onChange: e=>setNewDivNombre(e.target.value), onKeyDown: e=>e.key==="Enter"&&crearDiv(), autoFocus: true,} )
+          , React.createElement('button', { style: s.btnPrimary, onClick: crearDiv,}, "Crear")
+        )
+      )
+      , showEditDiv && (
+        React.createElement(Modal, { onClose: ()=>setShowEditDiv(false), titulo: "Renombrar curso" ,}
+          , React.createElement('p', { style: {fontSize:12,color:"#9ca3af",margin:"-4px 0 4px"},}, "Nombre actual: "  , React.createElement('strong', { style: {color:"#e2e8f0"},}, divActual))
+          , React.createElement('input', { style: s.input, placeholder: "Ej: 1ro 1ra EES 41"    , value: editDivNombre,
+            onChange: e=>setEditDivNombre(e.target.value), onKeyDown: e=>e.key==="Enter"&&renombrarDiv(), autoFocus: true,} )
+          , React.createElement('button', { style: s.btnPrimary, onClick: renombrarDiv,}, "Guardar nombre" )
+        )
+      )
+      , showImport && React.createElement(ModalImportar, { onClose: ()=>setShowImport(false), onImportar: importarAlumnos,} )
+      , showAddAl && (
+        React.createElement(Modal, { onClose: ()=>{setShowAddAl(false);setEditId(null);}, titulo: editId?"Editar alumno":"Agregar alumno",}
+          , React.createElement('input', { style: s.input, placeholder: "Apellido", value: formAl.apellido,
+            onChange: e=>setFormAl(f=>({...f,apellido:e.target.value.toUpperCase()})),} )
+          , React.createElement('input', { style: s.input, placeholder: "Nombre", value: formAl.nombre,
+            onChange: e=>setFormAl(f=>({...f,nombre:e.target.value.toUpperCase()})),} )
+          , React.createElement('div', { style: s.radioGroup,}
+            , ["M","F"].map(sx=>(
+              React.createElement('button', { key: sx, onClick: ()=>setFormAl(f=>({...f,sexo:sx})),
+                style: {...s.radioBtn,...(formAl.sexo===sx?s.radioBtnActive:{})},}
+                , sx==="M"?"Varón":"Mujer"
+              )
+            ))
+          )
+          , React.createElement('div', null
+            , React.createElement('p', { style: {fontSize:11,color:"#6b7280",margin:"0 0 4px"},}, "Fecha de nacimiento (opcional)"   )
+            , React.createElement('input', { type: "date", style: {...s.input,colorScheme:"dark"}, value: formAl.nacimiento||"",
+              onChange: e=>setFormAl(f=>({...f,nacimiento:e.target.value})),} )
+          )
+          , React.createElement('button', { style: s.btnPrimary, onClick: guardarAlumno,}, editId?"Guardar":"Agregar")
+        )
+      )
+      , modalAl && (
+        React.createElement(ModalAlumno, { alumno: modalAl, data: data, anio: anio,
+          onClose: ()=>setModalAl(null),
+          onEdit: ()=>{setEditId(modalAl.id);setFormAl({apellido:modalAl.apellido,nombre:modalAl.nombre,sexo:modalAl.sexo,nacimiento:modalAl.nacimiento||""});setShowAddAl(true);setModalAl(null);},
+          onDelete: ()=>{if(window.confirm(`¿Eliminar permanentemente a ${modalAl.apellido}?`))eliminarAlumno(modalAl.id);},
+          onDarDeBaja: ()=>darDeBaja(modalAl),} )
+      )
+    )
+  );
+}
+
+// ── VISTA HOY ─────────────────────────────────────────────────────
+function VistaHoy({ alumnos, data, mes, dia, diasDelMes, dayStats, setMes, setDia, setEstado, toggleEF, setModalAl, feriados, toggleFeriado, anio }) {
+  const h = hoy();
+  return (
+    React.createElement('div', null
+      , React.createElement('div', { style: s.mesRow,}
+        , React.createElement('button', { style: s.mesArrow, onClick: ()=>setMes(m=>Math.max(0,m-1)),}, "‹")
+        , React.createElement('span', { style: s.mesNombre,}, MESES[mes])
+        , React.createElement('button', { style: s.mesArrow, onClick: ()=>setMes(m=>Math.min(11,m+1)),}, "›")
+      )
+
+      , React.createElement('div', { style: s.diasStrip,}
+        , Array.from({length:diasDelMes},(_,i)=>i+1).map(d=>{
+          const isHoy=d===h.dia&&mes===h.mes, isSel=d===dia;
+          const finde=esFinde(anio,mes,d);
+          const esFer=!!feriados[kF(mes,d)];
+          const ds=calcDayStats(alumnos,data,mes,d);
+          const pct=alumnos.length>0?ds.P/alumnos.length:0;
+          // background priority: selected > feriado > finde > normal
+          let btnBg = "#1e293b";
+          if (finde) btnBg = "#1e2533";
+          if (esFer) btnBg = "#431407";
+          if (isSel) btnBg = "#6366f1";
+          const DIAS_SEMANA = ["D","L","M","X","J","V","S"];
+          const dow = diaSemana(anio,mes,d);
+          return (
+            React.createElement('button', { key: d, onClick: ()=>setDia(d),
+              onContextMenu: e=>{e.preventDefault();toggleFeriado(mes,d);},
+              onTouchStart: e=>{const t=setTimeout(()=>{toggleFeriado(mes,d);},600);e.currentTarget._fTimer=t;},
+              onTouchEnd: e=>{clearTimeout(e.currentTarget._fTimer);},
+              onTouchMove: e=>{clearTimeout(e.currentTarget._fTimer);},
+              style: {...s.diaBtn,
+                background: btnBg,
+                border: isHoy&&!isSel?"2px solid #6366f1": esFer&&!isSel?"2px solid #f97316":"none",
+                opacity: finde&&!isSel ? 0.55 : 1,
+              },}
+              , React.createElement('span', { style: {...s.diaBtnDow, color: finde?"#64748b": esFer?"#fb923c":"#475569"},}, DIAS_SEMANA[dow])
+              , React.createElement('span', { style: {...s.diaBtnNum, color: isSel?"#fff": finde?"#64748b": esFer?"#fb923c":"#e2e8f0"},}, d)
+              , React.createElement('div', { style: {...s.diaBtnBar,width:`${pct*100}%`,background:isSel?"#ffffff40":"#22c55e40"},} )
+            )
+          );
+        })
+      )
+      , React.createElement('p', { style: {fontSize:10,color:"#6b7280",textAlign:"right",marginBottom:4},}, "Mantené presionado un día para marcar/desmarcar feriado 🟠"
+
+      )
+
+      , React.createElement('div', { style: s.statsRow,}
+        , React.createElement(StatChip, { label: "Pres.",  value: dayStats.P,  color: "#22c55e",})
+        , React.createElement(StatChip, { label: "Aus.",   value: dayStats.A,  color: "#ef4444",})
+        , React.createElement(StatChip, { label: "Tarde",  value: dayStats.T,  color: "#f59e0b",})
+        , React.createElement(StatChip, { label: "Just.",  value: dayStats.J,  color: "#3b82f6",})
+        , React.createElement(StatChip, { label: "EF",     value: dayStats.EF, color: "#a855f7",})
+      )
+
+      /* FILA GÉNERO */
+      , React.createElement('div', { style: s.generoPanel,}
+        , React.createElement('div', { style: s.generoBloque,}
+          , React.createElement('span', { style: s.generoTitulo,}, "👦 Varones" )
+          , React.createElement('div', { style: s.generoStats,}
+            , React.createElement('span', { style: s.generoItem,}, React.createElement('span', { style: {color:"#22c55e",fontWeight:700,fontSize:15},}, dayStats.VP), React.createElement('span', { style: s.generoSub,}, " pres." ))
+            , React.createElement('span', { style: s.generoDivider,})
+            , React.createElement('span', { style: s.generoItem,}, React.createElement('span', { style: {color:"#ef4444",fontWeight:700,fontSize:15},}, dayStats.VA), React.createElement('span', { style: s.generoSub,}, " aus." ))
+            , React.createElement('span', { style: s.generoDivider,})
+            , React.createElement('span', { style: s.generoItem,}, React.createElement('span', { style: {color:"#60a5fa",fontWeight:700,fontSize:15},}, dayStats.totalV), React.createElement('span', { style: s.generoSub,}, " total" ))
+          )
+        )
+        , React.createElement('div', { style: s.generoBloqueDiv,})
+        , React.createElement('div', { style: s.generoBloque,}
+          , React.createElement('span', { style: s.generoTitulo,}, "👧 Mujeres" )
+          , React.createElement('div', { style: s.generoStats,}
+            , React.createElement('span', { style: s.generoItem,}, React.createElement('span', { style: {color:"#22c55e",fontWeight:700,fontSize:15},}, dayStats.MP), React.createElement('span', { style: s.generoSub,}, " pres." ))
+            , React.createElement('span', { style: s.generoDivider,})
+            , React.createElement('span', { style: s.generoItem,}, React.createElement('span', { style: {color:"#ef4444",fontWeight:700,fontSize:15},}, dayStats.MA), React.createElement('span', { style: s.generoSub,}, " aus." ))
+            , React.createElement('span', { style: s.generoDivider,})
+            , React.createElement('span', { style: s.generoItem,}, React.createElement('span', { style: {color:"#f472b6",fontWeight:700,fontSize:15},}, dayStats.totalM), React.createElement('span', { style: s.generoSub,}, " total" ))
+          )
+        )
+      )
+
+      /* FILA PRESENCIA FÍSICA */
+      , React.createElement('div', { style: s.presenciaPanel,}
+        , React.createElement('div', { style: s.presenciaBloque,}
+          , React.createElement('span', { style: {fontSize:18},}, "🏫")
+          , React.createElement('div', { style: {flex:1},}
+            , React.createElement('p', { style: s.presenciaLabel,}, "En la escuela"  )
+            , React.createElement('p', { style: s.presenciaDesc,}, "Presente + Tarde"  )
+          )
+          , React.createElement('span', { style: {...s.presenciaNum,color:"#22c55e"},}, dayStats.enEscuela)
+        )
+        , React.createElement('div', { style: s.generoBloqueDiv,})
+        , React.createElement('div', { style: s.presenciaBloque,}
+          , React.createElement('span', { style: {fontSize:18},}, "🏠")
+          , React.createElement('div', { style: {flex:1},}
+            , React.createElement('p', { style: s.presenciaLabel,}, "Fuera de la escuela"   )
+            , React.createElement('p', { style: s.presenciaDesc,}, "Ausente + Justificado"  )
+          )
+          , React.createElement('span', { style: {...s.presenciaNum,color:"#ef4444"},}, dayStats.fueraEscuela)
+        )
+      )
+
+      , React.createElement('div', { style: s.efLeyenda,}
+        , React.createElement('span', { style: s.efDot,})
+        , React.createElement('span', { style: {fontSize:11,color:"#9ca3af",lineHeight:1.4},}
+          , React.createElement('strong', { style: {color:"#d8b4fe"},}, "EF"), " = ausente Ed. Física (0,5 inasist.). Se muestra "
+            , React.createElement('strong', { style: {color:"#3b82f6"},}, "EFJ"), " (justificada) si ese día tiene J en el turno, o "
+           , React.createElement('strong', { style: {color:"#a855f7"},}, "EFI"), " (injustificada) en cualquier otro caso."
+        )
+      )
+
+      /* BANNER CUMPLEAÑOS */
+      , alumnos.filter(al=>esCumple(al.nacimiento,dia,mes)).map(al=>(
+        React.createElement('div', { key: al.id, style: s.cumpleBanner,}
+          , React.createElement('span', { style: {fontSize:22},}, "🎂")
+          , React.createElement('div', null
+            , React.createElement('p', { style: {margin:0,fontWeight:700,color:"#fde68a",fontSize:14},}, "¡Hoy cumple años!"  )
+            , React.createElement('p', { style: {margin:0,fontSize:12,color:"#fbbf24"},}, al.nombre, " " , al.apellido)
+          )
+          , React.createElement('span', { style: {fontSize:22},}, "🎉")
+        )
+      ))
+
+      , React.createElement('div', { style: s.alumnosList,}
+        , alumnos.map(al=>{
+          const turno=data[kT(mes,dia,al.id)]||"";
+          const tieneEF=!!data[kEF(mes,dia,al.id)];
+          const efJust=tieneEF&&efEsJustificada(turno);
+          const cumpleHoy=esCumple(al.nacimiento,dia,mes);
+          return (
+            React.createElement('div', { key: al.id, style: {...s.alumnoRow,...(cumpleHoy?{border:"1px solid #f59e0b40",background:"#111820"}:{})},}
+              , React.createElement('button', { style: s.alumnoInfo, onClick: ()=>setModalAl(al),}
+                , React.createElement('span', { style: {...s.avatar,background:al.sexo==="M"?"#1e40af22":"#be185d22",color:al.sexo==="M"?"#60a5fa":"#f472b6"},}
+                  , cumpleHoy?"🎂":al.apellido[0]
+                )
+                , React.createElement('div', { style: {minWidth:0},}
+                  , React.createElement('p', { style: s.alumnoAp,}, al.apellido)
+                  , React.createElement('p', { style: s.alumnoNom,}, al.nombre, cumpleHoy?" 🎂":"")
+                )
+                , al.enRiesgo&&React.createElement('span', { title: "En riesgo" ,}, "⚠️")
+              )
+
+              , React.createElement('div', { style: s.estadoBtns,}
+                , ESTADOS.map(e=>(
+                  React.createElement('button', { key: e, onClick: ()=>setEstado(al.id,mes,dia,e),
+                    style: {...s.estadoBtn,
+                      background:turno===e?ESTADO_COLOR[e]:"transparent",
+                      color:turno===e?"#fff":ESTADO_COLOR[e],
+                      borderColor:ESTADO_COLOR[e]},}
+                    , e
+                  )
+                ))
+                , React.createElement('button', { onClick: ()=>toggleEF(al.id,mes,dia),
+                  style: {...s.estadoBtn,
+                    background:tieneEF?(efJust?"#3b82f6":"#a855f7"):"transparent",
+                    color:tieneEF?"#fff":"#a855f7",
+                    borderColor:"#a855f7",
+                    fontSize:9,minWidth:32},}
+                  , tieneEF?(efJust?"EFJ":"EFI"):"EF"
+                )
+              )
+            )
+          );
+        })
+        , alumnos.length===0&&React.createElement('p', { style: s.emptyMsg,}, "No hay alumnos. Agregá desde la pestaña 👥"       )
+      )
+    )
+  );
+}
+
+// ── VISTA GRILLA ──────────────────────────────────────────────────
+function VistaGrilla({ alumnos, data, mes, diasDelMes, setMes, setEstado, toggleEF, feriados, toggleFeriado, anio }) {
+  const [modoEF, setModoEF] = useState(false);
+  const [modoFer, setModoFer] = useState(false);
+
+  function nextTurno(alId,m,d) {
+    const key=kT(m,d,alId), actual=data[key]||"";
+    const idx=ESTADOS.indexOf(actual);
+    setEstado(alId,m,d,idx<ESTADOS.length-1?ESTADOS[idx+1]:"");
+  }
+
+  return (
+    React.createElement('div', null
+      , React.createElement('div', { style: s.mesRow,}
+        , React.createElement('button', { style: s.mesArrow, onClick: ()=>setMes(m=>Math.max(0,m-1)),}, "‹")
+        , React.createElement('span', { style: s.mesNombre,}, MESES[mes])
+        , React.createElement('button', { style: s.mesArrow, onClick: ()=>setMes(m=>Math.min(11,m+1)),}, "›")
+      )
+
+      , React.createElement('div', { style: s.modoRow,}
+        , React.createElement('button', { onClick: ()=>setModoEF(false),  style: {...s.modoBtn,...(!modoEF&&!modoFer?s.modoBtnActive:{})},}, "Turno normal" )
+        , React.createElement('button', { onClick: ()=>setModoEF(true),   style: {...s.modoBtn,...( modoEF?s.modoBtnActiveEF:{})},}, "Ed. Física" )
+        , React.createElement('button', { onClick: ()=>setModoFer(v=>!v), style: {...s.modoBtn,...( modoFer?s.modoBtnActiveFer:{})},}, "🟠 Feriados" )
+      )
+      , React.createElement('p', { style: s.grillaHint,}
+        , modoFer?"Tocá un encabezado de día para marcar/desmarcar feriado":modoEF?"Tocá para marcar/desmarcar EF ausente":"Tocá para ciclar: P → A → T → J → vacío"
+      )
+
+      , React.createElement('div', { style: {overflowX:"auto",WebkitOverflowScrolling:"touch"},}
+        , React.createElement('table', { style: s.tabla,}
+          , React.createElement('thead', null
+            , React.createElement('tr', null
+              , React.createElement('th', { style: {...s.th,position:"sticky",left:0,background:"#0f172a",zIndex:2,minWidth:96},}, "Alumno")
+              , Array.from({length:diasDelMes},(_,i)=>i+1).map(d=>{
+                const finde=esFinde(anio,mes,d);
+                const esFer=!!feriados[kF(mes,d)];
+                const DIAS_SEMANA=["D","L","M","X","J","V","S"];
+                const dow=diaSemana(anio,mes,d);
+                let thBg="#0f172a", thColor="#9ca3af";
+                if (finde) { thBg="#0d1520"; thColor="#374151"; }
+                if (esFer) { thBg="#431407"; thColor="#fb923c"; }
+                return (
+                  React.createElement('th', { key: d, style: {...s.th,background:thBg,color:thColor,cursor:modoFer?"pointer":"default",minWidth:26},
+                    onClick: ()=>modoFer&&toggleFeriado(mes,d),}
+                    , React.createElement('div', { style: {fontSize:8,lineHeight:1},}, DIAS_SEMANA[dow])
+                    , React.createElement('div', null, d)
+                  )
+                );
+              })
+              , React.createElement('th', { style: {...s.th,position:"sticky",right:0,background:"#0f172a",zIndex:2,minWidth:40,color:"#6366f1"},}, "Tot.")
+            )
+          )
+          , React.createElement('tbody', null
+            , alumnos.map((al,ri)=>{
+              const rowBg=ri%2===0?"#111827":"#0f172a";
+              // Calculate monthly totals for this alumno
+              let mP=0,mA=0,mT=0,mJ=0,mEFI=0,mEFJ=0;
+              for(let d=1;d<=diasDelMes;d++){
+                const t=data[kT(mes,d,al.id)]||"";
+                if(t==="P")mP++;else if(t==="A")mA++;else if(t==="T")mT++;else if(t==="J")mJ++;
+                if(data[kEF(mes,d,al.id)]){if(efEsJustificada(t))mEFJ+=0.5;else mEFI+=0.5;}
+              }
+              const mInasist = mA + mT*0.5 + mEFI;
+              return (
+                React.createElement('tr', { key: al.id, style: {background:rowBg},}
+                  , React.createElement('td', { style: {...s.tdSticky,background:rowBg},}, al.apellido)
+                  , Array.from({length:diasDelMes},(_,i)=>i+1).map(d=>{
+                    const finde=esFinde(anio,mes,d);
+                    const esFer=!!feriados[kF(mes,d)];
+                    const turno=data[kT(mes,d,al.id)]||"";
+                    const tieneEF=!!data[kEF(mes,d,al.id)];
+                    const efJust=efEsJustificada(turno);
+                    let bg="transparent",txt="#374151",label="·";
+                    if (modoEF) {
+                      if (tieneEF){bg=efJust?"#3b82f6":"#a855f7";txt="#fff";label=efJust?"EFJ":"EFI";}
+                    } else {
+                      if (turno){bg=ESTADO_COLOR[turno];txt="#fff";label=turno;}
+                    }
+                    let colBg = "transparent";
+                    if (finde) colBg="#0d152008";
+                    if (esFer) colBg="#43140720";
+                    return (
+                      React.createElement('td', { key: d, style: {...s.td,background:colBg},
+                        onClick: ()=>modoFer?toggleFeriado(mes,d):modoEF?toggleEF(al.id,mes,d):nextTurno(al.id,mes,d),}
+                        , React.createElement('span', { style: {...s.celda,background:bg,color:txt,fontSize:label.length>1?8:11},}, label)
+                      )
+                    );
+                  })
+                  /* TOTAL cell */
+                  , React.createElement('td', { style: {...s.td,position:"sticky",right:0,background:rowBg,zIndex:1,minWidth:40},}
+                    , React.createElement('div', { style: {display:"flex",flexDirection:"column",alignItems:"center",padding:"2px 3px",gap:1},}
+                      , React.createElement('span', { style: {fontSize:10,fontWeight:700,color:mInasist>=3?"#ef4444":mInasist>0?"#f59e0b":"#22c55e",lineHeight:1},}, mInasist>0?`-${mInasist}`:"✓")
+                      , mP>0&&React.createElement('span', { style: {fontSize:8,color:"#22c55e",lineHeight:1},}, "P:", mP)
+                      , mJ>0&&React.createElement('span', { style: {fontSize:8,color:"#3b82f6",lineHeight:1},}, "J:", mJ)
+                    )
+                  )
+                )
+              );
+            })
+          )
+        )
+      )
+
+      , React.createElement('div', { style: s.leyenda,}
+        , ESTADOS.map(e=>(
+          React.createElement('span', { key: e, style: s.leyendaItem,}
+            , React.createElement('span', { style: {...s.celda,background:ESTADO_COLOR[e],color:"#fff"},}, e)
+            , React.createElement('span', { style: {color:"#9ca3af",fontSize:11},}, ESTADO_LABEL[e])
+          )
+        ))
+        , React.createElement('span', { style: s.leyendaItem,}
+          , React.createElement('span', { style: {...s.celda,background:"#a855f7",color:"#fff",fontSize:8},}, "EFI")
+          , React.createElement('span', { style: {color:"#9ca3af",fontSize:11},}, "EF injust." )
+        )
+        , React.createElement('span', { style: s.leyendaItem,}
+          , React.createElement('span', { style: {...s.celda,background:"#3b82f6",color:"#fff",fontSize:8},}, "EFJ")
+          , React.createElement('span', { style: {color:"#9ca3af",fontSize:11},}, "EF just." )
+        )
+      )
+
+      /* RESUMEN MENSUAL POR ALUMNO */
+      , React.createElement('h3', { style: {...s.secTitulo,fontSize:13,marginTop:20,marginBottom:10},}, "Resumen " , MESES[mes])
+      , React.createElement('div', { style: {display:"flex",flexDirection:"column",gap:5},}
+        , alumnos.map((al,i)=>{
+          let mP=0,mA=0,mT=0,mJ=0,mEFI=0,mEFJ=0;
+          for(let d=1;d<=diasDelMes;d++){
+            const t=data[kT(mes,d,al.id)]||"";
+            if(t==="P")mP++;else if(t==="A")mA++;else if(t==="T")mT++;else if(t==="J")mJ++;
+            if(data[kEF(mes,d,al.id)]){if(efEsJustificada(t))mEFJ+=0.5;else mEFI+=0.5;}
+          }
+          const mInasist=mA+mT*0.5+mEFI;
+          const col=mInasist>=3?"#ef4444":mInasist>0?"#f59e0b":"#22c55e";
+          const pct=Math.min(100,(mInasist/10)*100);
+          if(mP+mA+mT+mJ+mEFI+mEFJ===0) return null;
+          return (
+            React.createElement('div', { key: al.id, style: {background:"#111827",borderRadius:10,padding:"8px 12px"},}
+              , React.createElement('div', { style: {display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4},}
+                , React.createElement('span', { style: {fontSize:12,fontWeight:600,color:"#e2e8f0"},}, i+1, ". " , al.apellido)
+                , React.createElement('div', { style: {display:"flex",gap:8,alignItems:"center"},}
+                  , mP>0&&React.createElement('span', { style: {fontSize:11,color:"#22c55e"},}, "P:", mP)
+                  , mA>0&&React.createElement('span', { style: {fontSize:11,color:"#ef4444"},}, "A:", mA)
+                  , mT>0&&React.createElement('span', { style: {fontSize:11,color:"#f59e0b"},}, "T:", mT)
+                  , mJ>0&&React.createElement('span', { style: {fontSize:11,color:"#3b82f6"},}, "J:", mJ)
+                  , mEFI>0&&React.createElement('span', { style: {fontSize:11,color:"#a855f7"},}, "EFI:", mEFI)
+                  , mEFJ>0&&React.createElement('span', { style: {fontSize:11,color:"#818cf8"},}, "EFJ:", mEFJ)
+                  , React.createElement('span', { style: {fontSize:13,fontWeight:800,color:col,minWidth:28,textAlign:"right"},}, mInasist>0?`-${mInasist}`:"✓")
+                )
+              )
+              , React.createElement('div', { style: s.barBg,}, React.createElement('div', { style: {...s.barFill,width:`${pct}%`,background:col},}))
+            )
+          );
+        })
+      )
+    )
+  );
+}
+
+// ── VISTA ALERTAS ─────────────────────────────────────────────────
+function VistaAlertas({ alumnos, enRiesgo }) {
+  const sorted=[...alumnos].sort((a,b)=>b.totalInasist-a.totalInasist);
+  return (
+    React.createElement('div', null
+      , React.createElement('div', { style: {display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4},}
+        , React.createElement('h2', { style: s.secTitulo,}, "En riesgo" )
+        , React.createElement('span', { style: {...s.badge,background:enRiesgo.length>0?"#ef444420":"#22c55e20",color:enRiesgo.length>0?"#ef4444":"#22c55e"},}
+          , enRiesgo.length>0?`${enRiesgo.length} alumnos`:"Sin alertas"
+        )
+      )
+      , React.createElement('p', { style: {fontSize:12,color:"#6b7280",marginBottom:16},}, "Umbral: "
+         , UMBRAL_ALERTA, " inasistencias (turno + EFI)"
+      )
+
+      , enRiesgo.map(al=>(
+        React.createElement('div', { key: al.id, style: s.alertaCard,}
+          , React.createElement('div', { style: {display:"flex",alignItems:"center",gap:10},}
+            , React.createElement('span', { style: {fontSize:20},}, "⚠️")
+            , React.createElement('div', null
+              , React.createElement('p', { style: {margin:0,fontWeight:600,color:"#fca5a5",fontSize:14},}, al.apellido)
+              , React.createElement('p', { style: {margin:0,fontSize:11,color:"#9ca3af"},}, al.nombre)
+            )
+          )
+          , React.createElement('div', { style: {textAlign:"right"},}
+            , React.createElement('p', { style: {margin:0,fontSize:24,fontWeight:800,color:"#ef4444"},}, al.totalInasist)
+            , al.efInj>0&&React.createElement('p', { style: {margin:0,fontSize:10,color:"#a855f7"},}, "+", al.efInj, " EFI" )
+          )
+        )
+      ))
+
+      , React.createElement('h2', { style: {...s.secTitulo,marginTop:24,marginBottom:12},}, "Ranking del curso"  )
+      , sorted.map((al,i)=>{
+        const pct=Math.min(100,(al.totalInasist/UMBRAL_ALERTA)*100);
+        const col=al.enRiesgo?"#ef4444":pct>60?"#f59e0b":"#22c55e";
+        return (
+          React.createElement('div', { key: al.id, style: s.rankRow,}
+            , React.createElement('span', { style: {width:22,fontSize:12,color:"#6b7280",textAlign:"center"},}, i+1)
+            , React.createElement('div', { style: {flex:1},}
+              , React.createElement('div', { style: {display:"flex",justifyContent:"space-between",marginBottom:4},}
+                , React.createElement('span', { style: {fontSize:13,color:"#e2e8f0"},}, al.apellido)
+                , React.createElement('div', { style: {textAlign:"right"},}
+                  , React.createElement('span', { style: {fontSize:13,fontWeight:700,color:col},}, al.totalInasist)
+                  , al.efInj>0&&React.createElement('span', { style: {fontSize:10,color:"#a855f7",marginLeft:4},}, "(", al.efInj, " EFI)" )
+                )
+              )
+              , React.createElement('div', { style: s.barBg,}, React.createElement('div', { style: {...s.barFill,width:`${pct}%`,background:col},}))
+            )
+          )
+        );
+      })
+    )
+  );
+}
+
+// ── VISTA CONFIG ──────────────────────────────────────────────────
+function VistaConfig({ alumnos, divActual, onAdd, onEdit, onDelete, onReorder, archivo, onDarDeBaja, onReincorporar, onImport, data, anio }) {
+  const [lista, setLista] = useState(alumnos);
+  const [dragging, setDragging] = useState(null);      // index being dragged
+  const [dragOver, setDragOver] = useState(null);      // index being hovered
+  const touchDragIdx = useRef(null);
+  const touchOverIdx = useRef(null);
+  const itemRefs = useRef([]);
+
+  // Sync when alumnos prop changes
+  useEffect(() => { setLista(alumnos); }, [alumnos]);
+
+  function reorder(from, to) {
+    if (from === to || to === null) return;
+    const arr = [...lista];
+    const [moved] = arr.splice(from, 1);
+    arr.splice(to, 0, moved);
+    setLista(arr);
+    onReorder(arr);
+  }
+
+  // ── MOUSE DRAG ──────────────────────────────────────────────────
+  function onDragStart(e, i) { setDragging(i); e.dataTransfer.effectAllowed = 'move'; }
+  function onDragOver(e, i)  { e.preventDefault(); setDragOver(i); }
+  function onDrop(e, i)      { e.preventDefault(); reorder(dragging, i); setDragging(null); setDragOver(null); }
+  function onDragEnd()       { setDragging(null); setDragOver(null); }
+
+  // ── TOUCH DRAG ──────────────────────────────────────────────────
+  function onTouchStart(e, i) {
+    touchDragIdx.current = i;
+    touchOverIdx.current = i;
+    setDragging(i);
+  }
+  function onTouchMove(e) {
+    e.preventDefault();
+    const touch = e.touches[0];
+    const el = document.elementFromPoint(touch.clientX, touch.clientY);
+    const row = el && el.closest('[data-dragidx]');
+    if (row) {
+      const idx = parseInt(row.getAttribute('data-dragidx'));
+      if (idx !== touchOverIdx.current) {
+        touchOverIdx.current = idx;
+        setDragOver(idx);
+      }
+    }
+  }
+  function onTouchEnd() {
+    reorder(touchDragIdx.current, touchOverIdx.current);
+    touchDragIdx.current = null;
+    touchOverIdx.current = null;
+    setDragging(null);
+    setDragOver(null);
+  }
+
+  return (
+    React.createElement('div', null
+      , React.createElement('div', { style: {display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8},}
+        , React.createElement('div', null
+          , React.createElement('h2', { style: s.secTitulo,}, divActual)
+          , React.createElement('p', { style: {fontSize:12,color:"#6b7280",margin:0},}, lista.length, " alumnos" )
+        )
+        , React.createElement('div', { style: {display:"flex",gap:6},}
+          , React.createElement('button', { style: {...s.btnSecondary,padding:"8px 10px",fontSize:12}, onClick: onImport,}, "📋 Pegar lista"  )
+          , React.createElement('button', { style: s.btnPrimary, onClick: onAdd,}, "+ Alumno" )
+        )
+      )
+      , React.createElement('p', { style: {fontSize:11,color:"#6b7280",marginBottom:10,display:"flex",alignItems:"center",gap:4},}
+        , React.createElement('span', null, "☰"), " Arrastrá para reordenar · el número refleja el orden de lista"
+      )
+      , lista.map((al,i)=>(
+        React.createElement('div', { key: al.id,
+          'data-dragidx': i,
+          draggable: true,
+          onDragStart: e=>onDragStart(e,i),
+          onDragOver: e=>onDragOver(e,i),
+          onDrop: e=>onDrop(e,i),
+          onDragEnd: onDragEnd,
+          onTouchStart: e=>onTouchStart(e,i),
+          onTouchMove: onTouchMove,
+          onTouchEnd: onTouchEnd,
+          style: {
+            ...s.alumnoRow, marginBottom:6,
+            opacity: dragging===i ? 0.4 : 1,
+            background: dragOver===i && dragging!==i ? "#1e3a5f" : "#111827",
+            border: dragOver===i && dragging!==i ? "1.5px solid #3b82f6" : "1.5px solid transparent",
+            transition:"background 0.15s,border 0.15s",
+            cursor:"grab",
+            userSelect:"none",
+          },}
+          , React.createElement('span', { style: {fontSize:16,color:"#4b5563",paddingRight:4,flexShrink:0},}, "☰")
+          , React.createElement('span', { style: {width:22,fontSize:12,fontWeight:700,color:"#6366f1",flexShrink:0},}, i+1)
+          , React.createElement('div', { style: {flex:1,minWidth:0},}
+            , React.createElement('p', { style: s.alumnoAp,}, al.apellido)
+            , React.createElement('p', { style: s.alumnoNom,}, al.nombre, " · "  , al.sexo)
+          )
+          , React.createElement('button', { style: s.iconBtn, onClick: e=>{e.stopPropagation();onEdit(al);},}, "✏️")
+          , React.createElement('button', { style: s.iconBtn, onClick: e=>{e.stopPropagation();if(window.confirm(`¿Eliminar a ${al.apellido}?`))onDelete(al.id);},}, "🗑️")
+        )
+      ))
+      , lista.length===0&&React.createElement('p', { style: s.emptyMsg,}, "No hay alumnos. Agregá el primero arriba."      )
+
+      /* ARCHIVO */
+      , archivo && archivo.length > 0 && (
+        React.createElement('div', { style: {marginTop:24},}
+          , React.createElement('div', { style: {display:"flex",alignItems:"center",gap:8,marginBottom:10},}
+            , React.createElement('h3', { style: {...s.secTitulo,margin:0,fontSize:14},}, "📦 Archivo — Alumnos dados de baja"      )
+            , React.createElement('span', { style: {background:"#37415130",color:"#9ca3af",borderRadius:20,padding:"2px 8px",fontSize:11},}, archivo.length)
+          )
+          , archivo.map(al=>{
+            const stats = calcStats([al], data, anio)[0];
+            return (
+              React.createElement('div', { key: al.id, style: {...s.alumnoRow,marginBottom:6,opacity:0.75,border:"1px solid #374151"},}
+                , React.createElement('div', { style: {flex:1,minWidth:0},}
+                  , React.createElement('p', { style: {...s.alumnoAp,color:"#9ca3af"},}, al.apellido)
+                  , React.createElement('p', { style: s.alumnoNom,}, al.nombre, " · Baja: "   , al.fechaBaja)
+                  , React.createElement('p', { style: {margin:0,fontSize:10,color:"#6b7280"},}, "Inasist. registradas: "  , stats.totalInasist)
+                )
+                , React.createElement('button', { onClick: ()=>onReincorporar(al),
+                  style: {background:"#16a34a20",color:"#4ade80",border:"1px solid #16a34a40",borderRadius:8,padding:"6px 10px",fontSize:11,fontWeight:600,cursor:"pointer",flexShrink:0},}, "📥 Reincorporar"
+
+                )
+              )
+            );
+          })
+        )
+      )
+    )
+  );
+}
+
+// ── MODAL ALUMNO ──────────────────────────────────────────────────
+function ModalAlumno({ alumno, data, anio, onClose, onEdit, onDelete, onDarDeBaja }) {
+  const mesesStats=MESES.map((nombre,m)=>{
+    let P=0,A=0,T=0,J=0,efInj=0,efJust=0;
+    for(let d=1;d<=diasEnMes(m,anio);d++){
+      const turno=data[kT(m,d,alumno.id)]||"";
+      if(turno==="P")P++;else if(turno==="A")A++;else if(turno==="T")T++;else if(turno==="J")J++;
+      if(data[kEF(m,d,alumno.id)]){if(efEsJustificada(turno))efJust+=0.5;else efInj+=0.5;}
+    }
+    const inasist=A+T*0.5+efInj;
+    return {nombre:nombre.slice(0,3),P,A,T,J,efInj,efJust,inasist,hay:P||A||T||J||efInj||efJust};
+  });
+  return (
+    React.createElement(Modal, { onClose: onClose, titulo: alumno.apellido,}
+      , React.createElement('p', { style: {color:"#9ca3af",fontSize:13,margin:"-8px 0 12px"},}
+        , alumno.nombre
+        , alumno.nacimiento && React.createElement('span', { style: {marginLeft:8,color:"#f59e0b",fontSize:12},}, "🎂 " , new Date(alumno.nacimiento+"T00:00:00").toLocaleDateString("es-AR",{day:"numeric",month:"long"}))
+      )
+      , React.createElement('div', { style: {display:"flex",gap:10,marginBottom:12},}
+        , React.createElement('div', { style: s.statCard,}
+          , React.createElement('span', { style: {fontSize:22,fontWeight:800,color:alumno.enRiesgo?"#ef4444":"#22c55e"},}, alumno.totalInasist)
+          , React.createElement('span', { style: {fontSize:11,color:"#9ca3af"},}, "Inasist. anuales" )
+        )
+        , React.createElement('div', { style: s.statCard,}
+          , React.createElement('span', { style: {fontSize:14,fontWeight:700,color:alumno.enRiesgo?"#ef4444":"#22c55e"},}
+            , alumno.enRiesgo?"⚠️ En riesgo":"✓ Sin alerta"
+          )
+          , React.createElement('span', { style: {fontSize:11,color:"#9ca3af"},}, "Estado")
+        )
+      )
+      , (alumno.efInj>0||alumno.efJus>0)&&(
+        React.createElement('div', { style: {background:"#a855f720",border:"1px solid #a855f730",borderRadius:8,padding:"8px 12px",marginBottom:12,fontSize:12,color:"#d8b4fe"},}, "EFI: "
+           , React.createElement('strong', null, alumno.efInj), "  ·  EFJ: "   , React.createElement('strong', null, alumno.efJus)
+        )
+      )
+      , React.createElement('div', { style: {background:"#1e293b",borderRadius:10,padding:12},}
+        , mesesStats.filter(m=>m.hay).map((m,i)=>(
+          React.createElement('div', { key: i, style: {display:"flex",alignItems:"center",gap:8,paddingBottom:6},}
+            , React.createElement('span', { style: {color:"#9ca3af",fontSize:12,width:34},}, m.nombre)
+            , React.createElement('div', { style: {display:"flex",gap:6,flexWrap:"wrap",flex:1},}
+              , m.P>0&&React.createElement('span', { style: {color:"#22c55e",fontSize:12},}, "P:", m.P)
+              , m.A>0&&React.createElement('span', { style: {color:"#ef4444",fontSize:12},}, "A:", m.A)
+              , m.T>0&&React.createElement('span', { style: {color:"#f59e0b",fontSize:12},}, "T:", m.T)
+              , m.J>0&&React.createElement('span', { style: {color:"#3b82f6",fontSize:12},}, "J:", m.J)
+              , m.efInj>0&&React.createElement('span', { style: {color:"#a855f7",fontSize:12},}, "EFI:", m.efInj)
+              , m.efJust>0&&React.createElement('span', { style: {color:"#818cf8",fontSize:12},}, "EFJ:", m.efJust)
+            )
+            , React.createElement('span', { style: {fontSize:12,fontWeight:700,color:m.inasist>=3?"#ef4444":m.inasist>0?"#f59e0b":"#22c55e"},}
+              , m.inasist>0?`-${m.inasist}`:"✓"
+            )
+          )
+        ))
+        , mesesStats.every(m=>!m.hay)&&React.createElement('p', { style: {color:"#6b7280",fontSize:12,margin:0},}, "Sin registros aún."  )
+      )
+      , React.createElement('div', { style: {display:"flex",gap:8,marginTop:14,flexWrap:"wrap"},}
+        , React.createElement('button', { style: {...s.btnSecondary,flex:1}, onClick: onEdit,}, "✏️ Editar" )
+        , React.createElement('button', { style: {...s.btnBaja,flex:1}, onClick: onDarDeBaja,}, "📤 Dar de baja"   )
+        , React.createElement('button', { style: {...s.btnDanger,width:"100%"}, onClick: onDelete,}, "🗑️ Eliminar permanentemente"  )
+      )
+      , React.createElement('p', { style: {fontSize:10,color:"#6b7280",margin:"4px 0 0",textAlign:"center"},}, "\"Dar de baja\" archiva al alumno con su historial. \"Eliminar\" borra todo para siempre."
+
+      )
+    )
+  );
+}
+
+// ── MODAL BASE ────────────────────────────────────────────────────
+function Modal({ onClose, titulo, children }) {
+  return (
+    React.createElement('div', { style: s.overlay, onClick: e=>e.target===e.currentTarget&&onClose(),}
+      , React.createElement('div', { style: s.modalBox,}
+        , React.createElement('div', { style: s.modalHead,}
+          , React.createElement('h3', { style: {margin:0,fontSize:17,fontWeight:700},}, titulo)
+          , React.createElement('button', { style: s.modalClose, onClick: onClose,}, "✕")
+        )
+        , React.createElement('div', { style: s.modalBody,}, children)
+      )
+    )
+  );
+}
+
+// ── MODAL IMPORTAR ───────────────────────────────────────────────
+function ModalImportar({ onClose, onImportar }) {
+  const [texto, setTexto] = useState("");
+  const [preview, setPreview] = useState([]);
+  const [paso, setPaso] = useState(1); // 1=pegar, 2=revisar
+
+  function procesarTexto() {
+    const lista = parsearListado(texto);
+    if (lista.length === 0) return;
+    setPreview(lista);
+    setPaso(2);
+  }
+
+  function toggleSexo(i) {
+    setPreview(prev => prev.map((a, idx) =>
+      idx === i ? {...a, sexo: a.sexo==="M" ? "F" : a.sexo==="F" ? "?" : "M"} : a
+    ));
+  }
+
+  const dudosos = preview.filter(a => a.sexo === "?").length;
+
+  return (
+    React.createElement(Modal, { onClose: onClose, titulo: "Importar lista" ,}
+      , paso === 1 && (
+        React.createElement(React.Fragment, null
+          , React.createElement('p', { style: {fontSize:12,color:"#9ca3af",margin:"-4px 0 4px",lineHeight:1.5},}, "Pegá el listado en formato "
+                 , React.createElement('strong', { style: {color:"#e2e8f0"},}, "APELLIDO, Nombre" ), ", uno por línea."
+          )
+          , React.createElement('div', { style: {background:"#0f172a",borderRadius:8,padding:"8px 10px",marginBottom:4},}
+            , React.createElement('p', { style: {fontSize:11,color:"#6b7280",margin:0},}, "Ejemplo:")
+            , React.createElement('p', { style: {fontSize:11,color:"#94a3b8",margin:"2px 0 0",fontFamily:"monospace",lineHeight:1.6},}, "GARCIA, Juan Martín"
+                , React.createElement('br', null), "LOPEZ, Sofia Belen"  , React.createElement('br', null), "MARTINEZ, Thiago"
+            )
+          )
+          , React.createElement('textarea', {
+            style: {...s.input, height:180, resize:"vertical", fontFamily:"monospace", fontSize:12, lineHeight:1.6},
+            placeholder: "GARCIA, Juan Martin\nLOPEZ, Sofia Belen\nMARTINEZ, Thiago",
+            value: texto,
+            onChange: e=>setTexto(e.target.value),
+            autoFocus: true,}
+          )
+          , React.createElement('button', { style: {...s.btnPrimary, opacity: texto.trim() ? 1 : 0.5},
+            onClick: procesarTexto, disabled: !texto.trim(),}, "Procesar lista →"
+
+          )
+        )
+      )
+      , paso === 2 && (
+        React.createElement(React.Fragment, null
+          , React.createElement('div', { style: {display:"flex",justifyContent:"space-between",alignItems:"center"},}
+            , React.createElement('p', { style: {fontSize:12,color:"#9ca3af",margin:0},}, preview.length, " alumnos detectados"  )
+            , dudosos > 0 && React.createElement('span', { style: {fontSize:11,color:"#f59e0b",background:"#f59e0b20",padding:"2px 8px",borderRadius:20},}, "⚠️ " , dudosos, " género dudoso"  )
+          )
+          , dudosos > 0 && (
+            React.createElement('p', { style: {fontSize:11,color:"#6b7280",margin:"4px 0"},}, "Tocá el botón de género para cambiar: M → F → ?"
+
+            )
+          )
+          , React.createElement('div', { style: {maxHeight:320,overflowY:"auto",display:"flex",flexDirection:"column",gap:4},}
+            , preview.map((al, i) => (
+              React.createElement('div', { key: i, style: {display:"flex",alignItems:"center",gap:8,background:"#1e293b",borderRadius:8,padding:"7px 10px",
+                border: al.sexo==="?" ? "1px solid #f59e0b40" : "1px solid transparent"},}
+                , React.createElement('div', { style: {flex:1,minWidth:0},}
+                  , React.createElement('p', { style: {margin:0,fontSize:12,fontWeight:600,color:"#e2e8f0"},}, al.apellido)
+                  , React.createElement('p', { style: {margin:0,fontSize:11,color:"#9ca3af"},}, al.nombre)
+                )
+                , React.createElement('button', { onClick: ()=>toggleSexo(i), style: {
+                  padding:"4px 10px",borderRadius:8,border:"none",cursor:"pointer",fontWeight:700,fontSize:12,
+                  background: al.sexo==="M"?"#1e40af30":al.sexo==="F"?"#be185d30":"#78350f30",
+                  color: al.sexo==="M"?"#60a5fa":al.sexo==="F"?"#f472b6":"#f59e0b"
+                },}
+                  , al.sexo==="?"?"?":al.sexo
+                )
+              )
+            ))
+          )
+          , React.createElement('div', { style: {display:"flex",gap:8},}
+            , React.createElement('button', { style: {...s.btnSecondary,flex:1}, onClick: ()=>setPaso(1),}, "← Volver" )
+            , React.createElement('button', { style: {...s.btnPrimary,flex:2}, onClick: ()=>onImportar(preview),}, "Agregar "
+               , preview.length, " alumnos ✓"
+            )
+          )
+        )
+      )
+    )
+  );
+}
+
+function StatChip({ label, value, color }) {
+  return (
+    React.createElement('div', { style: {...s.statChip,borderColor:color+"40"},}
+      , React.createElement('span', { style: {fontSize:19,fontWeight:800,color},}, value)
+      , React.createElement('span', { style: {fontSize:10,color:"#9ca3af",textTransform:"uppercase",letterSpacing:0.8},}, label)
+    )
+  );
+}
+
+// ── ESTILOS ───────────────────────────────────────────────────────
+const s = {
+  root:          {background:"#0a0f1a",minHeight:"100vh",fontFamily:"'DM Sans','Segoe UI',sans-serif",color:"#f1f5f9",paddingBottom:84,maxWidth:480,margin:"0 auto"},
+  header:        {background:"linear-gradient(135deg,#0f172a 0%,#1e1b4b 100%)",padding:"18px 16px 12px",borderBottom:"1px solid #1e293b"},
+  headerTop:     {display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12},
+  headerLabel:   {fontSize:10,letterSpacing:3,color:"#6366f1",textTransform:"uppercase",margin:0},
+  headerTitle:   {fontSize:26,fontWeight:800,margin:0},
+  anioTag:       {background:"#6366f120",color:"#818cf8",padding:"4px 10px",borderRadius:20,fontSize:13,fontWeight:600},
+  divSelector:   {display:"flex",gap:6,flexWrap:"wrap"},
+  divBtn:        {padding:"5px 12px",borderRadius:20,border:"1px solid #374151",background:"transparent",color:"#9ca3af",fontSize:12,cursor:"pointer"},
+  divBtnActive:  {background:"#6366f1",borderColor:"#6366f1",color:"#fff",fontWeight:700},
+  divBtnAdd:     {padding:"5px 10px",borderRadius:20,border:"1px dashed #374151",background:"transparent",color:"#6366f1",fontSize:16,cursor:"pointer"},
+  main:          {padding:"16px 16px 0"},
+  nav:           {position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:480,background:"#0f172a",borderTop:"1px solid #1e293b",display:"flex",zIndex:100},
+  navBtn:        {flex:1,background:"none",border:"none",color:"#6b7280",padding:"10px 4px",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:2},
+  navBtnActive:  {color:"#818cf8"},
+  navIcon:       {fontSize:20},
+  navLabel:      {fontSize:10},
+  mesRow:        {display:"flex",alignItems:"center",justifyContent:"center",gap:20,marginBottom:12},
+  mesArrow:      {background:"#1e293b",border:"none",color:"#9ca3af",fontSize:22,width:36,height:36,borderRadius:10,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"},
+  mesNombre:     {fontSize:18,fontWeight:700,color:"#e2e8f0",minWidth:130,textAlign:"center"},
+  diasStrip:     {display:"flex",gap:4,overflowX:"auto",paddingBottom:8,WebkitOverflowScrolling:"touch",scrollbarWidth:"none",marginBottom:12},
+  diaBtn:        {flex:"0 0 auto",width:36,height:46,background:"#1e293b",border:"none",borderRadius:8,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"flex-end",overflow:"hidden",position:"relative",padding:0},
+  diaBtnSel:     {background:"#6366f1"},
+  diaBtnHoy:     {border:"2px solid #6366f1"},
+  diaBtnNum:     {fontSize:12,fontWeight:600,color:"#e2e8f0",position:"absolute",top:6,zIndex:1},
+  diaBtnBar:     {height:"40%",background:"#22c55e40",borderRadius:"0 0 8px 8px"},
+  statsRow:      {display:"flex",gap:5,marginBottom:10},
+  statChip:      {flex:1,background:"#111827",borderRadius:10,padding:"7px 2px",display:"flex",flexDirection:"column",alignItems:"center",border:"1px solid #374151"},
+  efLeyenda:     {display:"flex",alignItems:"flex-start",gap:6,background:"#a855f710",borderRadius:8,padding:"8px 10px",marginBottom:12},
+  efDot:         {width:8,height:8,borderRadius:"50%",background:"#a855f7",flexShrink:0,marginTop:3},
+  cumpleBanner:  {display:"flex",alignItems:"center",gap:12,background:"linear-gradient(135deg,#78350f40,#92400e30)",border:"1px solid #f59e0b40",borderRadius:12,padding:"12px 16px",marginBottom:10,justifyContent:"space-between"},
+  alumnosList:   {display:"flex",flexDirection:"column",gap:6},
+  alumnoRow:     {background:"#111827",borderRadius:12,padding:"8px 8px 8px 12px",display:"flex",alignItems:"center",gap:8},
+  alumnoInfo:    {flex:1,display:"flex",alignItems:"center",gap:10,background:"none",border:"none",cursor:"pointer",textAlign:"left",padding:0,minWidth:0},
+  avatar:        {width:34,height:34,borderRadius:10,display:"flex",alignItems:"center",justifyContent:"center",fontSize:15,fontWeight:700,flexShrink:0},
+  alumnoAp:      {margin:0,fontSize:13,fontWeight:600,color:"#e2e8f0",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"},
+  alumnoNom:     {margin:0,fontSize:11,color:"#6b7280",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"},
+  estadoBtns:    {display:"flex",gap:3,flexShrink:0},
+  estadoBtn:     {width:28,height:28,borderRadius:7,border:"1.5px solid",fontSize:11,fontWeight:700,cursor:"pointer"},
+  emptyMsg:      {textAlign:"center",color:"#6b7280",padding:32,lineHeight:1.6},
+  modoRow:       {display:"flex",gap:6,marginBottom:8},
+  modoBtn:       {flex:1,padding:"8px",borderRadius:10,border:"1px solid #374151",background:"#1e293b",color:"#9ca3af",fontSize:12,cursor:"pointer"},
+  modoBtnActive: {borderColor:"#6366f1",color:"#818cf8",background:"#6366f120"},
+  modoBtnActiveEF: {borderColor:"#a855f7",color:"#d8b4fe",background:"#a855f720"},
+  modoBtnActiveFer:{borderColor:"#f97316",color:"#fb923c",background:"#f9731620"},
+  diaBtnDow:       {fontSize:8,color:"#475569",position:"absolute",top:2,zIndex:1,lineHeight:1},
+  grillaHint:    {fontSize:11,color:"#6b7280",textAlign:"center",marginBottom:8},
+  tabla:         {borderCollapse:"collapse",minWidth:"100%"},
+  th:            {padding:"5px 3px",fontSize:11,color:"#9ca3af",textAlign:"center",background:"#0f172a",position:"sticky",top:0},
+  td:            {padding:"2px 2px",textAlign:"center",cursor:"pointer"},
+  tdSticky:      {padding:"4px 6px",fontSize:10,color:"#e2e8f0",position:"sticky",left:0,zIndex:1,maxWidth:96},
+  celda:         {display:"inline-flex",width:22,height:22,borderRadius:5,alignItems:"center",justifyContent:"center",fontWeight:700},
+  leyenda:       {display:"flex",gap:10,justifyContent:"center",marginTop:12,flexWrap:"wrap"},
+  leyendaItem:   {display:"flex",alignItems:"center",gap:4},
+  alertaCard:    {background:"#7f1d1d20",border:"1px solid #ef444430",borderRadius:12,padding:"12px 16px",display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8},
+  secTitulo:     {fontSize:16,fontWeight:700,margin:"0 0 4px",color:"#e2e8f0"},
+  badge:         {padding:"3px 10px",borderRadius:20,fontSize:12,fontWeight:600},
+  rankRow:       {display:"flex",alignItems:"center",gap:10,marginBottom:10},
+  barBg:         {height:4,background:"#1e293b",borderRadius:2,overflow:"hidden"},
+  barFill:       {height:"100%",borderRadius:2,transition:"width 0.3s"},
+  iconBtn:       {background:"none",border:"none",fontSize:16,cursor:"pointer",padding:4},
+  overlay:       {position:"fixed",inset:0,background:"#00000090",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:200},
+  modalBox:      {background:"#111827",borderRadius:"20px 20px 0 0",width:"100%",maxWidth:480,maxHeight:"88vh",overflow:"auto"},
+  modalHead:     {display:"flex",justifyContent:"space-between",alignItems:"center",padding:"18px 20px 12px",borderBottom:"1px solid #1e293b",position:"sticky",top:0,background:"#111827"},
+  modalClose:    {background:"#1e293b",border:"none",color:"#9ca3af",width:30,height:30,borderRadius:8,cursor:"pointer",fontSize:13},
+  modalBody:     {padding:"16px 20px 24px",display:"flex",flexDirection:"column",gap:12},
+  input:         {width:"100%",background:"#1e293b",border:"1px solid #374151",borderRadius:10,padding:"11px 14px",color:"#f1f5f9",fontSize:14,boxSizing:"border-box",outline:"none"},
+  radioGroup:    {display:"flex",gap:8},
+  radioBtn:      {flex:1,padding:"10px",background:"#1e293b",border:"1px solid #374151",borderRadius:10,color:"#9ca3af",cursor:"pointer",fontSize:14},
+  radioBtnActive:{background:"#6366f120",borderColor:"#6366f1",color:"#818cf8",fontWeight:700},
+  btnPrimary:    {background:"#6366f1",color:"#fff",border:"none",borderRadius:10,padding:"11px 20px",fontWeight:700,fontSize:14,cursor:"pointer"},
+  btnSecondary:  {background:"#1e293b",color:"#9ca3af",border:"1px solid #374151",borderRadius:10,padding:"10px 16px",fontWeight:600,fontSize:13,cursor:"pointer"},
+  btnDanger:     {background:"#7f1d1d20",color:"#ef4444",border:"1px solid #ef444430",borderRadius:10,padding:"10px 16px",fontWeight:600,fontSize:13,cursor:"pointer"},
+  btnBaja:       {background:"#78350f20",color:"#fb923c",border:"1px solid #78350f40",borderRadius:10,padding:"10px 16px",fontWeight:600,fontSize:13,cursor:"pointer"},
+  statCard:      {flex:1,background:"#1e293b",borderRadius:10,padding:"10px",display:"flex",flexDirection:"column",alignItems:"center",gap:4},
+  generoPanel:    {display:"flex",background:"#111827",borderRadius:12,padding:"10px 12px",marginBottom:8,alignItems:"stretch"},
+  generoBloque:   {flex:1,display:"flex",flexDirection:"column",gap:6},
+  generoTitulo:   {fontSize:11,color:"#9ca3af",fontWeight:600,letterSpacing:0.5},
+  generoStats:    {display:"flex",alignItems:"center",gap:8},
+  generoItem:     {display:"flex",flexDirection:"column",alignItems:"center",gap:1},
+  generoSub:      {fontSize:10,color:"#6b7280"},
+  generoDivider:  {width:1,height:24,background:"#1e293b",flexShrink:0},
+  generoBloqueDiv:{width:1,background:"#374151",margin:"0 10px",flexShrink:0},
+  presenciaPanel: {display:"flex",background:"#111827",borderRadius:12,padding:"10px 12px",marginBottom:10,alignItems:"stretch"},
+  presenciaBloque:{flex:1,display:"flex",alignItems:"center",gap:8},
+  presenciaLabel: {margin:0,fontSize:12,fontWeight:600,color:"#e2e8f0"},
+  presenciaDesc:  {margin:0,fontSize:10,color:"#6b7280"},
+  presenciaNum:   {fontSize:22,fontWeight:800,flexShrink:0},
+};
+
+window.__App = App;
+
+window.__App = App;
+
+  const root = ReactDOM.createRoot(document.getElementById('root'));
+  root.render(React.createElement(React.StrictMode, null, React.createElement(window.__App)));
+  </script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js')
+          .then(() => console.log('SW OK'))
+          .catch(e => console.log('SW error', e));
+      });
+    }
+  </script>
+</body>
+</html>
