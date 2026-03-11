@@ -1,3 +1,6 @@
+(function(){
+var React = window.React;
+var ReactDOM = window.ReactDOM;
 const { useState, useEffect, useCallback, useRef } = React;
 
 // ── DATOS ─────────────────────────────────────────────────────────
@@ -1197,3 +1200,5 @@ const s = {
 };
 
 window.__App = App;
+
+})();
